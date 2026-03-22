@@ -20,9 +20,8 @@ This repository contains a universal iOS app target and a shared Swift package f
 - `Apps/SwingReplayPad`: iPad receiver UI/runtime
 - `Config/*.plist`: app permissions and launch/orientation settings
 
-## Implemented (Task List aligned)
+## Implemented
 
-Implemented in code:
 - A0-1/A0-2: iPhone app target + Info.plist permissions (camera/local network/bonjour)
 - A0-3: logging base with `OSLog`
 - A1-1..A1-5: phone-side Multipeer advertise/session/reconnect flow
@@ -59,7 +58,7 @@ swift test
 xcodebuild -project SwingReplayApps.xcodeproj -scheme SwingReplay -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
-## Next Work
+## Future Improvements
 
 - A5: sender side real-device long-run and reconnect validation
 - C: end-to-end UX/stability validation with iPhone + iPad pair
