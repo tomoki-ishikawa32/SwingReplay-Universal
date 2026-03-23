@@ -3,27 +3,67 @@ import SwingReplayCore
 
 struct PadRootView: View {
     @ObservedObject var runtime: PadRuntimeController
+    let onExit: () -> Void
     @State private var isSettingsPresented = false
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack {
+            ReceiverFullScreenView(gravity: .fill) { view in
+                runtime.bindBackgroundDisplayView(view)
+            }
+            .ignoresSafeArea()
+            .overlay {
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.18),
+                        Color.black.opacity(0.28)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+
             ReceiverFullScreenView(gravity: .fit) { view in
                 runtime.bindDisplayView(view)
             }
             .background(Color.black)
+            .ignoresSafeArea()
+        }
+        .safeAreaInset(edge: .top) {
+            HStack {
+                Button(action: onExit) {
+                    Label("ホーム", systemImage: "chevron.backward")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.black.opacity(0.35))
 
-            Button {
-                isSettingsPresented = true
-            } label: {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.headline.weight(.semibold))
-                    .frame(width: 38, height: 38)
+                Spacer()
+
+                Button {
+                    isSettingsPresented = true
+                } label: {
+                    Image(systemName: "timer")
+                        .font(.headline.weight(.semibold))
+                        .frame(width: 40, height: 40)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.black.opacity(0.35))
+                .accessibilityLabel("Open Playback Delay Settings")
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
-            .padding(.top, 12)
-            .padding(.trailing, 12)
-            .accessibilityLabel("Open Settings")
+            .padding(.horizontal, 18)
+            .padding(.top, 8)
+            .padding(.bottom, 14)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.42),
+                        Color.black.opacity(0.16),
+                        Color.clear
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
         }
         .sheet(isPresented: $isSettingsPresented) {
             NavigationStack {

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct PhoneRootView: View {
     @ObservedObject var runtime: PhoneRuntimeController
+    let onExit: () -> Void
 
     var body: some View {
         GeometryReader { proxy in
@@ -21,9 +22,25 @@ struct PhoneRootView: View {
                 .ignoresSafeArea()
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Swing Replay / Phone")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(.white)
+                    HStack {
+                        Button(action: onExit) {
+                            Label("ホーム", systemImage: "chevron.backward")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.black.opacity(0.35))
+
+                        Spacer()
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Swing Replay")
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(.white)
+
+                        Text("iPhone / 送信中")
+                            .font(.headline)
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
 
                     Text("Status: \(runtime.connectionText)")
                         .font(.headline)
@@ -76,6 +93,10 @@ private final class PreviewContainerView: UIView {
             previewLayer.session = session
         }
         previewLayer.videoGravity = .resizeAspectFill
+        if let connection = previewLayer.connection,
+           connection.isVideoRotationAngleSupported(90) {
+            connection.videoRotationAngle = 90
+        }
         backgroundColor = .black
     }
 }

@@ -7,6 +7,9 @@ final class PadRuntimeController: ObservableObject {
     @Published private(set) var connectionText: String = "Waiting"
     @Published private(set) var debugText: String = "receiveFPS=0 buffered=0"
     @Published private(set) var runtimeText: String = "waiting"
+    @Published private(set) var currentPairingPayload: PairingPayload?
+    @Published private(set) var displayCode: String = "------"
+    @Published private(set) var isConnected = false
     @Published var targetDelaySeconds: Double = 3 {
         didSet {
             pipeline.setTargetDelaySeconds(targetDelaySeconds)
@@ -21,6 +24,7 @@ final class PadRuntimeController: ObservableObject {
     )
 
     private weak var displayView: SampleBufferDisplayView?
+    private weak var backgroundDisplayView: SampleBufferDisplayView?
     private let receiveQueue = DispatchQueue(label: "swingreplay.pad.receive")
     private var decodeTimer: Timer?
     private var monitorTimer: Timer?
@@ -31,6 +35,12 @@ final class PadRuntimeController: ObservableObject {
         receiverSession.stateDidChange = { [weak self] state in
             Task { @MainActor in
                 guard let self else { return }
+                self.isConnected = {
+                    if case .connected = state {
+                        return true
+                    }
+                    return false
+                }()
                 self.connectionText = Self.describe(state: state)
                 self.failSafe.handleConnectionState(state)
             }
@@ -47,6 +57,7 @@ final class PadRuntimeController: ObservableObject {
         decoder.onFrameDecoded = { [weak self] frame in
             guard let self else { return }
             Task { @MainActor in
+                self.backgroundDisplayView?.enqueue(frame.sampleBuffer)
                 self.displayView?.enqueue(frame.sampleBuffer)
                 self.fpsCounter += 1
             }
@@ -56,10 +67,18 @@ final class PadRuntimeController: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
+        let payload = PairingPayload.make()
+        currentPairingPayload = payload
+        displayCode = payload.displayCode
 
-        receiverSession.start()
+        receiverSession.start(pairingToken: payload.pairingToken)
         startDecodeTimer()
         startMonitorTimer()
+    }
+
+    func regeneratePairing() {
+        stop()
+        start()
     }
 
     func stop() {
@@ -69,13 +88,24 @@ final class PadRuntimeController: ObservableObject {
         monitorTimer = nil
         receiverSession.stop()
         decoder.invalidate()
+        backgroundDisplayView?.reset()
         displayView?.reset()
         failSafe.reset()
+        currentPairingPayload = nil
+        displayCode = "------"
+        isConnected = false
+        connectionText = "Waiting"
+        runtimeText = "waiting"
+        debugText = "receiveFPS=0 buffered=0"
         started = false
     }
 
     func bindDisplayView(_ view: SampleBufferDisplayView) {
         displayView = view
+    }
+
+    func bindBackgroundDisplayView(_ view: SampleBufferDisplayView) {
+        backgroundDisplayView = view
     }
 
     private func startDecodeTimer() {
@@ -129,10 +159,13 @@ final class PadRuntimeController: ObservableObject {
             // Avoid reconnect thrash while connection is being negotiated.
             if connectionText.hasPrefix("Connected") {
                 receiverSession.stop()
-                receiverSession.start()
+                if let currentPairingPayload {
+                    receiverSession.start(pairingToken: currentPairingPayload.pairingToken)
+                }
             }
         case .resetPipeline:
             pipeline.reset()
+            backgroundDisplayView?.reset()
             displayView?.reset()
         case .waitForBuffer:
             break

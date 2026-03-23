@@ -29,8 +29,8 @@ public final class RealtimeH264Encoder {
         public let keyFrameInterval: Int32
 
         public init(
-            width: Int32 = 960,
-            height: Int32 = 540,
+            width: Int32 = 540,
+            height: Int32 = 960,
             fps: Int32 = 24,
             bitrate: Int32 = 1_000_000,
             keyFrameInterval: Int32 = 24

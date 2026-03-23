@@ -11,27 +11,36 @@ public final class PhoneSenderSession: NSObject, @unchecked Sendable {
 
     private let peerID: MCPeerID
     private let session: MCSession
-    private let advertiser: MCNearbyServiceAdvertiser
+    private var browser: MCNearbyServiceBrowser?
     private let logger = Logger(subsystem: "SwingReplay", category: "PhoneSender")
+    private var targetPairingToken: String?
+    private var lastInviteAtByPeer: [String: Date] = [:]
+    private let inviteCooldown: TimeInterval = 3
 
     public init(peerID: MCPeerID = PeerIdentity.makePeerID(prefix: "phone")) {
         self.peerID = peerID
         self.session = MCSession(peer: peerID, securityIdentity: nil, encryptionPreference: .none)
-        self.advertiser = MCNearbyServiceAdvertiser(peer: peerID, discoveryInfo: nil, serviceType: MultipeerConfig.serviceType)
         super.init()
         session.delegate = self
-        advertiser.delegate = self
     }
 
-    public func start() {
-        advertiser.startAdvertisingPeer()
+    public func start(pairingToken: String) {
+        targetPairingToken = pairingToken
+        lastInviteAtByPeer.removeAll()
+        let browser = MCNearbyServiceBrowser(peer: peerID, serviceType: MultipeerConfig.serviceType)
+        browser.delegate = self
+        self.browser = browser
+        browser.startBrowsingForPeers()
         state = .searching
-        logger.info("Advertising started")
+        logger.info("Browsing started for pairing token \(pairingToken, privacy: .private(mask: .hash))")
     }
 
     public func stop() {
-        advertiser.stopAdvertisingPeer()
+        browser?.stopBrowsingForPeers()
+        browser = nil
         session.disconnect()
+        targetPairingToken = nil
+        lastInviteAtByPeer.removeAll()
         state = .searching
         logger.info("Sender stopped")
     }
@@ -45,11 +54,15 @@ public final class PhoneSenderSession: NSObject, @unchecked Sendable {
         try session.send(data, toPeers: session.connectedPeers, with: mode)
     }
 
-    private func recoverAdvertising() {
-        advertiser.stopAdvertisingPeer()
-        advertiser.startAdvertisingPeer()
+    private func reBrowse() {
+        guard let pairingToken = targetPairingToken else { return }
+        browser?.stopBrowsingForPeers()
+        let browser = MCNearbyServiceBrowser(peer: peerID, serviceType: MultipeerConfig.serviceType)
+        browser.delegate = self
+        self.browser = browser
+        browser.startBrowsingForPeers()
         state = .reconnecting
-        logger.notice("Re-advertising after disconnect")
+        logger.notice("Re-browsing after disconnect for pairing token \(pairingToken, privacy: .private(mask: .hash))")
     }
 }
 
@@ -57,35 +70,16 @@ public enum SenderError: Error {
     case noConnectedPeer
 }
 
-extension PhoneSenderSession: MCNearbyServiceAdvertiserDelegate {
-    public func advertiser(
-        _ advertiser: MCNearbyServiceAdvertiser,
-        didReceiveInvitationFromPeer peerID: MCPeerID,
-        withContext context: Data?,
-        invitationHandler: @escaping (Bool, MCSession?) -> Void
-    ) {
-        state = .connecting
-        invitationHandler(true, session)
-        logger.info("Invitation accepted from \(peerID.displayName, privacy: .public)")
-    }
-
-    public func advertiser(
-        _ advertiser: MCNearbyServiceAdvertiser,
-        didNotStartAdvertisingPeer error: Error
-    ) {
-        state = .error(message: error.localizedDescription)
-        logger.error("Advertiser start failed: \(error.localizedDescription, privacy: .public)")
-    }
-}
-
 extension PhoneSenderSession: MCSessionDelegate {
     public func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
         switch state {
         case .notConnected:
-            recoverAdvertising()
+            lastInviteAtByPeer.removeValue(forKey: peerID.displayName)
+            reBrowse()
         case .connecting:
             self.state = .connecting
         case .connected:
+            browser?.stopBrowsingForPeers()
             self.state = .connected(peerName: peerID.displayName)
         @unknown default:
             self.state = .error(message: "Unknown session state")
@@ -122,5 +116,45 @@ extension PhoneSenderSession: MCSessionDelegate {
         withError error: (any Error)?
     ) {
         logger.debug("Resource receiving finished: \(resourceName, privacy: .public)")
+    }
+}
+
+extension PhoneSenderSession: MCNearbyServiceBrowserDelegate {
+    public func browser(
+        _ browser: MCNearbyServiceBrowser,
+        foundPeer peerID: MCPeerID,
+        withDiscoveryInfo info: [String: String]?
+    ) {
+        guard session.connectedPeers.isEmpty else { return }
+        guard let targetPairingToken else { return }
+        guard info?[MultipeerConfig.pairingTokenKey] == targetPairingToken else { return }
+
+        let now = Date()
+        if let lastInviteAt = lastInviteAtByPeer[peerID.displayName],
+           now.timeIntervalSince(lastInviteAt) < inviteCooldown {
+            return
+        }
+
+        lastInviteAtByPeer[peerID.displayName] = now
+        state = .connecting
+        browser.invitePeer(
+            peerID,
+            to: session,
+            withContext: Data(targetPairingToken.utf8),
+            timeout: 10
+        )
+        logger.info("Inviting matched peer \(peerID.displayName, privacy: .public)")
+    }
+
+    public func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {
+        lastInviteAtByPeer.removeValue(forKey: peerID.displayName)
+        if session.connectedPeers.isEmpty {
+            reBrowse()
+        }
+    }
+
+    public func browser(_ browser: MCNearbyServiceBrowser, didNotStartBrowsingForPeers error: Error) {
+        state = .error(message: error.localizedDescription)
+        logger.error("Browsing failed: \(error.localizedDescription, privacy: .public)")
     }
 }
