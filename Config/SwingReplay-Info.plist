@@ -25,7 +25,7 @@
 		<string>_swing-replay._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>スイング映像を撮影して送信するためにカメラを使用します。</string>
+	<string>スイング映像の撮影と、iPadのQRコード読み取りによる接続のためにカメラを使用します。</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>映像の送受信のためにローカルネットワークを使用します。</string>
 	<key>UILaunchScreen</key>

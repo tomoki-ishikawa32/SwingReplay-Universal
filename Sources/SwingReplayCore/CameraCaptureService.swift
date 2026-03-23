@@ -11,7 +11,7 @@ public final class CameraCaptureService: NSObject, @unchecked Sendable {
         public let height: Int32
         public let fps: Int32
 
-        public init(width: Int32 = 960, height: Int32 = 540, fps: Int32 = 24) {
+        public init(width: Int32 = 540, height: Int32 = 960, fps: Int32 = 24) {
             self.width = width
             self.height = height
             self.fps = fps
@@ -61,7 +61,9 @@ public final class CameraCaptureService: NSObject, @unchecked Sendable {
         }
         session.addOutput(output)
 
-        _ = output.connection(with: .video)
+        if let connection = output.connection(with: .video) {
+            configureVideoOrientation(for: connection)
+        }
     }
 
     public func startRunning() {
@@ -95,6 +97,12 @@ public final class CameraCaptureService: NSObject, @unchecked Sendable {
         let frameDuration = CMTime(value: 1, timescale: configuration.fps)
         camera.activeVideoMinFrameDuration = frameDuration
         camera.activeVideoMaxFrameDuration = frameDuration
+    }
+
+    private func configureVideoOrientation(for connection: AVCaptureConnection) {
+        if connection.isVideoRotationAngleSupported(90) {
+            connection.videoRotationAngle = 90
+        }
     }
 }
 
